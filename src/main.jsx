@@ -16,6 +16,8 @@ import systemPrompt from '../prompt.txt?raw';
 import './styles.css';
 
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/chat/completions';
+const DEEPSEEK_MODEL = 'deepseek-v4-flash';
+const DEEPSEEK_FALLBACK_MODEL = 'deepseek-chat';
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 const emptyResult = {
@@ -130,6 +132,41 @@ async function fileToVisionImageUrl(file) {
   throw new Error('仅支持 PNG、JPG、WEBP 图片或 PDF 文件。');
 }
 
+async function requestDeepSeekRecognition(apiKey, userContent, model = DEEPSEEK_MODEL) {
+  const response = await fetch(DEEPSEEK_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.1,
+      thinking: { type: 'disabled' },
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            systemPrompt.trim() ||
+            '你是工程图识别助手。请从工程图中提取结构化零件参数，只返回有效 JSON。',
+        },
+        {
+          role: 'user',
+          content: userContent,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    return { ok: false, status: response.status, detail };
+  }
+
+  return { ok: true, data: await response.json() };
+}
+
 async function recognizeDrawing(file) {
   const apiKey = import.meta.env.VITE_DEEPSEEK_KEY;
   if (!apiKey) {
@@ -152,38 +189,17 @@ async function recognizeDrawing(file) {
     },
   ];
 
-  const response = await fetch(DEEPSEEK_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'deepseek-chat',
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content:
-            systemPrompt.trim() ||
-            '你是工程图识别助手。请从工程图中提取结构化零件参数，只返回有效 JSON。',
-        },
-        {
-          role: 'user',
-          content: userContent,
-        },
-      ],
-    }),
-  });
+  let result = await requestDeepSeekRecognition(apiKey, userContent);
 
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`DeepSeek API 请求失败：${response.status} ${detail}`);
+  if (!result.ok && result.detail.includes('unknown variant `image_url`')) {
+    result = await requestDeepSeekRecognition(apiKey, userContent, DEEPSEEK_FALLBACK_MODEL);
   }
 
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '';
+  if (!result.ok) {
+    throw new Error(`DeepSeek API 请求失败：${result.status} ${result.detail}`);
+  }
+
+  const content = result.data.choices?.[0]?.message?.content || '';
   return normalizeRecognition(parseDeepSeekJson(content));
 }
 
