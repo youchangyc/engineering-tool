@@ -83,9 +83,9 @@ async function fileToPayload(file) {
 }
 
 async function recognizeDrawing(file) {
-  const apiKey = import.meta.env.REACT_APP_DEEPSEEK_KEY;
+  const apiKey = import.meta.env.VITE_DEEPSEEK_KEY;
   if (!apiKey) {
-    throw new Error('缺少 REACT_APP_DEEPSEEK_KEY，请在 .env 中配置。');
+    throw new Error('缺少 VITE_DEEPSEEK_KEY，请在 .env 中配置。');
   }
 
   const payload = await fileToPayload(file);
