@@ -1,0 +1,15 @@
+{
+  "envId": "engineering-tool-d0eupr1a0c23e75",
+  "framework": {
+    "name": "engineering-tool",
+    "plugins": {
+      "client": {
+        "use": "@cloudbase/framework-plugin-website",
+        "inputs": {
+          "buildCommand": "npm run build",
+          "outputPath": "dist"
+        }
+      }
+    }
+  }
+}
