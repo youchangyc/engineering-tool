@@ -9,11 +9,14 @@ import {
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import * as THREE from 'three';
 import systemPrompt from '../prompt.txt?raw';
 import './styles.css';
 
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/chat/completions';
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 const emptyResult = {
   partName: '',
@@ -66,20 +69,65 @@ function parseDeepSeekJson(text) {
   return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
 }
 
-async function fileToPayload(file) {
-  const dataUrl = await new Promise((resolve, reject) => {
+async function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
 
-  return {
-    name: file.name,
-    type: file.type || 'application/octet-stream',
-    size: file.size,
-    dataUrl,
-  };
+async function imageFileToJpegDataUrl(file) {
+  const dataUrl = await fileToDataUrl(file);
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0);
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+async function pdfFirstPageToJpegDataUrl(file) {
+  const data = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  await page.render({
+    canvasContext: context,
+    viewport,
+  }).promise;
+
+  await pdf.destroy();
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+async function fileToVisionImageUrl(file) {
+  if (file.type.startsWith('image/')) {
+    return imageFileToJpegDataUrl(file);
+  }
+
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    return pdfFirstPageToJpegDataUrl(file);
+  }
+
+  throw new Error('仅支持 PNG、JPG、WEBP 图片或 PDF 文件。');
 }
 
 async function recognizeDrawing(file) {
@@ -88,27 +136,21 @@ async function recognizeDrawing(file) {
     throw new Error('缺少 VITE_DEEPSEEK_KEY，请在 .env 中配置。');
   }
 
-  const payload = await fileToPayload(file);
+  const imageUrl = await fileToVisionImageUrl(file);
   const userContent = [
     {
       type: 'text',
       text:
         '请识别这份工程图，必须只返回 JSON。字段包含：零件名称、图号、材质、重量、主要尺寸、特征列表、形状类型。' +
-        `文件名：${payload.name}，MIME：${payload.type}。`,
+        `文件名：${file.name}，MIME：${file.type || 'application/octet-stream'}。`,
+    },
+    {
+      type: 'image_url',
+      image_url: {
+        url: imageUrl,
+      },
     },
   ];
-
-  if (payload.type.startsWith('image/')) {
-    userContent.push({
-      type: 'image_url',
-      image_url: { url: payload.dataUrl },
-    });
-  } else {
-    userContent.push({
-      type: 'text',
-      text: `PDF 文件 base64 data URL：${payload.dataUrl}`,
-    });
-  }
 
   const response = await fetch(DEEPSEEK_ENDPOINT, {
     method: 'POST',
