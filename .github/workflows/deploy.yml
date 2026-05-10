@@ -1,0 +1,35 @@
+name: Deploy to Tencent CloudBase
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Build and deploy static website
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build static files
+        run: npm run build
+
+      - name: Deploy dist to Tencent CloudBase
+        uses: cloudbase/github-action-static-website@v1
+        with:
+          secretId: ${{ secrets.TENCENT_SECRET_ID }}
+          secretKey: ${{ secrets.TENCENT_SECRET_KEY }}
+          envId: engineering-tool-d0eupr1a0c23e75
+          staticSrcPath: dist
