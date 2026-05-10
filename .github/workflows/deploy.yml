@@ -10,7 +10,7 @@ jobs:
     name: Build and deploy static website
     runs-on: ubuntu-latest
     env:
-      REACT_APP_DEEPSEEK_KEY: ${{ secrets.REACT_APP_DEEPSEEK_KEY }}
+      VITE_DEEPSEEK_KEY: ${{ secrets.VITE_DEEPSEEK_KEY }}
 
     steps:
       - name: Checkout repository
