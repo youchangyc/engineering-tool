@@ -6,8 +6,9 @@
       "client": {
         "use": "@cloudbase/framework-plugin-website",
         "inputs": {
+          "installCommand": "npm install",
           "buildCommand": "npm run build",
-          "outputPath": "dist"
+          "outputPath": "./dist"
         }
       }
     }
