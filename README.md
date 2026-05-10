@@ -14,7 +14,7 @@ npm run dev
 复制 `.env.example` 为 `.env`，填写：
 
 ```bash
-REACT_APP_DEEPSEEK_KEY=your_deepseek_api_key_here
+VITE_DEEPSEEK_KEY=your_deepseek_api_key_here
 ```
 
 ## 构建
